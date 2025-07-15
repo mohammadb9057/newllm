@@ -1,70 +1,108 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Separator } from '@/components/ui/separator'
-import { Send, Bot, User, Copy, Download, Trash2, Settings } from 'lucide-react'
-import { PERSIAN_LLM_PROVIDERS, createPersianLLMClient } from '@/lib/persian-llm-client'
-import { toast } from 'sonner'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { MessageSquare, Send, Bot, User, Zap } from 'lucide-react'
+import { useAuth } from '@/components/auth-provider'
+import { useToast } from '@/hooks/use-toast'
 
 interface Message {
   id: string
-  role: 'user' | 'assistant'
   content: string
+  role: 'user' | 'assistant'
   timestamp: Date
-  provider?: string
+  model?: string
+  tokens_used?: number
 }
 
-interface ChatSettings {
-  provider: string
-  apiKey: string
-  maxTokens: number
-  temperature: number
-  systemPrompt: string
+interface Model {
+  id: string
+  name: string
+  description: string
+  max_tokens: number
+  cost_per_token: number
 }
 
 export function PersianLLMChat() {
+  const { user } = useAuth()
+  const { toast } = useToast()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [showSettings, setShowSettings] = useState(false)
-  const [settings, setSettings] = useState<ChatSettings>({
-    provider: PERSIAN_LLM_PROVIDERS[0].name,
-    apiKey: '',
-    maxTokens: 1024,
-    temperature: 0.7,
-    systemPrompt: 'شما یک دستیار هوش مصنوعی فارسی‌زبان هستید که به کاربران کمک می‌کنید.'
-  })
-  
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+  const [selectedModel, setSelectedModel] = useState('gpt-3.5-turbo')
+  const [models, setModels] = useState<Model[]>([])
+  const [userTokens, setUserTokens] = useState({ used: 0, limit: 1000, remaining: 1000 })
 
   useEffect(() => {
-    scrollToBottom()
-  }, [messages])
-
-  const handleSendMessage = async () => {
-    if (!input.trim() || !settings.apiKey) {
-      if (!settings.apiKey) {
-        toast.error('لطفاً کلید API را در تنظیمات وارد کنید')
-      }
-      return
+    if (user?.api_token) {
+      fetchModels()
+      fetchUsage()
     }
+  }, [user])
+
+  const fetchModels = async () => {
+    if (!user?.api_token) return
+
+    try {
+      const response = await fetch('/api/llm/models', {
+        headers: {
+          'Authorization': `Bearer ${user.api_token}`
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        setModels(data.models)
+        if (data.user_info) {
+          setUserTokens({
+            used: data.user_info.tokens_used,
+            limit: data.user_info.tokens_limit,
+            remaining: data.user_info.remaining_tokens
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching models:', error)
+    }
+  }
+
+  const fetchUsage = async () => {
+    if (!user?.api_token) return
+
+    try {
+      const response = await fetch('/api/llm/usage', {
+        headers: {
+          'Authorization': `Bearer ${user.api_token}`
+        }
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data.usage) {
+          setUserTokens({
+            used: data.usage.tokens_used,
+            limit: data.usage.tokens_limit,
+            remaining: data.usage.remaining_tokens
+          })
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching usage:', error)
+    }
+  }
+
+  const sendMessage = async () => {
+    if (!input.trim() || isLoading || !user?.api_token) return
 
     const userMessage: Message = {
       id: Date.now().toString(),
+      content: input,
       role: 'user',
-      content: input.trim(),
       timestamp: new Date()
     }
 
@@ -73,231 +111,190 @@ export function PersianLLMChat() {
     setIsLoading(true)
 
     try {
-      const client = createPersianLLMClient(settings.provider, settings.apiKey)
-      const response = await client.generateText(userMessage.content, {
-        maxTokens: settings.maxTokens,
-        temperature: settings.temperature,
-        systemPrompt: settings.systemPrompt
+      const response = await fetch('/api/llm/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${user.api_token}`
+        },
+        body: JSON.stringify({
+          message: input,
+          model: selectedModel,
+          temperature: 0.7,
+          max_tokens: 1000
+        })
       })
 
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: response,
-        timestamp: new Date(),
-        provider: settings.provider
-      }
+      const data = await response.json()
 
-      setMessages(prev => [...prev, assistantMessage])
+      if (response.ok && data.success) {
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          content: data.response,
+          role: 'assistant',
+          timestamp: new Date(),
+          model: data.model,
+          tokens_used: data.tokens_used
+        }
+
+        setMessages(prev => [...prev, assistantMessage])
+        
+        // Update token usage
+        setUserTokens(prev => ({
+          ...prev,
+          used: prev.used + data.tokens_used,
+          remaining: data.remaining_tokens
+        }))
+
+        toast({
+          title: "پاسخ دریافت شد",
+          description: `${data.tokens_used} توکن استفاده شد`,
+        })
+      } else {
+        toast({
+          title: "خطا",
+          description: data.error || "خطا در ارسال پیام",
+          variant: "destructive"
+        })
+      }
     } catch (error) {
       console.error('Error sending message:', error)
-      toast.error('خطا در ارسال پیام. لطفاً دوباره تلاش کنید.')
+      toast({
+        title: "خطا",
+        description: "خطا در ارتباط با سرور",
+        variant: "destructive"
+      })
     } finally {
       setIsLoading(false)
-      inputRef.current?.focus()
     }
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      handleSendMessage()
+      sendMessage()
     }
   }
 
-  const copyMessage = (content: string) => {
-    navigator.clipboard.writeText(content)
-    toast.success('پیام کپی شد')
-  }
-
-  const clearChat = () => {
-    setMessages([])
-    toast.success('چت پاک شد')
-  }
-
-  const exportChat = () => {
-    const chatData = messages.map(msg => ({
-      role: msg.role,
-      content: msg.content,
-      timestamp: msg.timestamp.toISOString(),
-      provider: msg.provider
-    }))
-    
-    const blob = new Blob([JSON.stringify(chatData, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `persian-llm-chat-${new Date().toISOString().split('T')[0]}.json`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-    
-    toast.success('چت صادر شد')
+  if (!user) {
+    return (
+      <Card>
+        <CardContent className="p-6 text-center">
+          <p className="text-muted-foreground">برای استفاده از چت، لطفاً وارد شوید.</p>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
-    <div className="flex flex-col h-full max-w-4xl mx-auto p-4">
-      <Card className="flex-1 flex flex-col">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
-          <CardTitle className="text-xl font-bold">چت با مدل‌های زبانی فارسی</CardTitle>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowSettings(!showSettings)}
-            >
-              <Settings className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={exportChat}
-              disabled={messages.length === 0}
-            >
-              <Download className="h-4 w-4" />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={clearChat}
-              disabled={messages.length === 0}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
+    <div className="space-y-6">
+      {/* Token Usage Display */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <Zap className="h-5 w-5" />
+              میزان استفاده توکن
+            </span>
+            <Badge variant={userTokens.remaining < 100 ? "destructive" : "secondary"}>
+              {userTokens.remaining.toLocaleString('fa-IR')} باقی‌مانده
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span>استفاده شده: {userTokens.used.toLocaleString('fa-IR')}</span>
+              <span>حد مجاز: {userTokens.limit.toLocaleString('fa-IR')}</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div 
+                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${Math.min((userTokens.used / userTokens.limit) * 100, 100)}%` }}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Chat Interface */}
+      <Card className="h-[600px] flex flex-col">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MessageSquare className="h-5 w-5" />
+            چت هوشمند
+          </CardTitle>
+          <div className="flex gap-4">
+            <Select value={selectedModel} onValueChange={setSelectedModel}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue placeholder="انتخاب مدل" />
+              </SelectTrigger>
+              <SelectContent>
+                {models.map((model) => (
+                  <SelectItem key={model.id} value={model.id}>
+                    {model.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Badge variant="outline">
+              {models.find(m => m.id === selectedModel)?.name || selectedModel}
+            </Badge>
           </div>
         </CardHeader>
 
-        {showSettings && (
-          <CardContent className="border-b">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm font-medium mb-2 block">ارائه‌دهنده مدل</label>
-                <Select value={settings.provider} onValueChange={(value) => setSettings(prev => ({ ...prev, provider: value }))}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PERSIAN_LLM_PROVIDERS.map(provider => (
-                      <SelectItem key={provider.name} value={provider.name}>
-                        {provider.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div>
-                <label className="text-sm font-medium mb-2 block">کلید API</label>
-                <Input
-                  type="password"
-                  value={settings.apiKey}
-                  onChange={(e) => setSettings(prev => ({ ...prev, apiKey: e.target.value }))}
-                  placeholder="کلید API خود را وارد کنید"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium mb-2 block">حداکثر توکن‌ها</label>
-                <Input
-                  type="number"
-                  value={settings.maxTokens}
-                  onChange={(e) => setSettings(prev => ({ ...prev, maxTokens: parseInt(e.target.value) || 1024 }))}
-                  min="1"
-                  max="4096"
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium mb-2 block">دما (Temperature)</label>
-                <Input
-                  type="number"
-                  value={settings.temperature}
-                  onChange={(e) => setSettings(prev => ({ ...prev, temperature: parseFloat(e.target.value) || 0.7 }))}
-                  min="0"
-                  max="2"
-                  step="0.1"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="text-sm font-medium mb-2 block">پیام سیستم</label>
-                <Textarea
-                  value={settings.systemPrompt}
-                  onChange={(e) => setSettings(prev => ({ ...prev, systemPrompt: e.target.value }))}
-                  placeholder="پیام سیستم برای تنظیم رفتار مدل"
-                  rows={3}
-                />
-              </div>
-            </div>
-          </CardContent>
-        )}
-
-        <CardContent className="flex-1 flex flex-col p-0">
-          <ScrollArea className="flex-1 p-4">
+        <CardContent className="flex-1 flex flex-col">
+          <ScrollArea className="flex-1 mb-4 p-4 border rounded-lg">
             {messages.length === 0 ? (
               <div className="text-center text-muted-foreground py-8">
                 <Bot className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>سلام! من دستیار هوش مصنوعی فارسی‌زبان شما هستم.</p>
-                <p className="text-sm mt-2">برای شروع، پیامی بنویسید و ارسال کنید.</p>
+                <p>سلام! چطور می‌تونم کمکتون کنم؟</p>
               </div>
             ) : (
               <div className="space-y-4">
                 {messages.map((message) => (
                   <div
                     key={message.id}
-                    className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    className={`flex gap-3 ${
+                      message.role === 'user' ? 'justify-end' : 'justify-start'
+                    }`}
                   >
-                    <div className={`flex gap-3 max-w-[80%] ${message.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-                      <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                        message.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'
-                      }`}>
-                        {message.role === 'user' ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+                    <div
+                      className={`max-w-[80%] rounded-lg p-3 ${
+                        message.role === 'user'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-100 text-gray-900'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        {message.role === 'user' ? (
+                          <User className="h-4 w-4" />
+                        ) : (
+                          <Bot className="h-4 w-4" />
+                        )}
+                        <span className="text-xs opacity-70">
+                          {message.timestamp.toLocaleTimeString('fa-IR')}
+                        </span>
+                        {message.tokens_used && (
+                          <Badge variant="secondary" className="text-xs">
+                            {message.tokens_used} توکن
+                          </Badge>
+                        )}
                       </div>
-                      
-                      <div className={`rounded-lg p-3 ${
-                        message.role === 'user' 
-                          ? 'bg-primary text-primary-foreground' 
-                          : 'bg-muted'
-                      }`}>
-                        <div className="whitespace-pre-wrap text-sm">{message.content}</div>
-                        
-                        <div className="flex items-center justify-between mt-2 pt-2 border-t border-current/20">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs opacity-70">
-                              {message.timestamp.toLocaleTimeString('fa-IR')}
-                            </span>
-                            {message.provider && (
-                              <Badge variant="secondary" className="text-xs">
-                                {message.provider}
-                              </Badge>
-                            )}
-                          </div>
-                          
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => copyMessage(message.content)}
-                            className="h-6 w-6 p-0 opacity-70 hover:opacity-100"
-                          >
-                            <Copy className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </div>
+                      <p className="whitespace-pre-wrap">{message.content}</p>
                     </div>
                   </div>
                 ))}
-                
                 {isLoading && (
-                  <div className="flex gap-3 justify-start">
-                    <div className="flex gap-3 max-w-[80%]">
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-muted">
+                  <div className="flex justify-start">
+                    <div className="bg-gray-100 rounded-lg p-3 max-w-[80%]">
+                      <div className="flex items-center gap-2">
                         <Bot className="h-4 w-4" />
-                      </div>
-                      <div className="rounded-lg p-3 bg-muted">
-                        <div className="flex items-center gap-2">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
-                          <span className="text-sm">در حال تولید پاسخ...</span>
+                        <span className="text-sm">در حال تایپ...</span>
+                        <div className="flex gap-1">
+                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
                         </div>
                       </div>
                     </div>
@@ -305,37 +302,31 @@ export function PersianLLMChat() {
                 )}
               </div>
             )}
-            <div ref={messagesEndRef} />
           </ScrollArea>
 
-          <Separator />
-          
-          <div className="p-4">
-            <div className="flex gap-2">
-              <Input
-                ref={inputRef}
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyPress={handleKeyPress}
-                placeholder="پیام خود را بنویسید..."
-                disabled={isLoading}
-                className="flex-1"
-              />
-              <Button
-                onClick={handleSendMessage}
-                disabled={isLoading || !input.trim() || !settings.apiKey}
-                size="icon"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-            </div>
-            
-            {!settings.apiKey && (
-              <p className="text-sm text-muted-foreground mt-2">
-                لطفاً کلید API را در تنظیمات وارد کنید تا بتوانید از چت استفاده کنید.
-              </p>
-            )}
+          <div className="flex gap-2">
+            <Input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="پیام خود را بنویسید..."
+              disabled={isLoading || userTokens.remaining <= 0}
+              className="flex-1"
+            />
+            <Button 
+              onClick={sendMessage} 
+              disabled={isLoading || !input.trim() || userTokens.remaining <= 0}
+              size="icon"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
           </div>
+
+          {userTokens.remaining <= 0 && (
+            <p className="text-sm text-red-600 mt-2 text-center">
+              حد مجاز توکن شما تمام شده است. برای ادامه استفاده، لطفاً با پشتیبانی تماس بگیرید.
+            </p>
+          )}
         </CardContent>
       </Card>
     </div>

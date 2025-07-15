@@ -39,6 +39,9 @@ export default async function HomePage() {
             <Link href="/analytics">
               <Button variant="ghost">تحلیل پیش‌بینی</Button>
             </Link>
+            <Link href="/api-tokens">
+              <Button variant="ghost">توکن‌های API</Button>
+            </Link>
             {demoUser ? (
               <Link href="/dashboard">
                 <Button>داشبورد{demoUser.id === "demo" ? " (دمو)" : ""}</Button>

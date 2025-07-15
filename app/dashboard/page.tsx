@@ -1,10 +1,11 @@
 import { AIDashboard } from '@/components/ai-dashboard'
+import { DashboardLayout } from '@/components/dashboard-layout'
 
 export default function DashboardPage() {
   return (
-    <div className="container mx-auto py-6">
+    <DashboardLayout>
       <AIDashboard />
-    </div>
+    </DashboardLayout>
   )
 }
 

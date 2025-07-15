@@ -43,33 +43,48 @@ interface UsageStats {
   featureUsage: { feature: string; count: number }[]
 }
 
+import { useAuth } from "@/components/auth-provider"
+
 export function AIDashboard() {
+  const { user } = useAuth()
   const [stats, setStats] = useState<UsageStats>({
-    totalRequests: 12847,
-    successRate: 98.5,
-    avgResponseTime: 1.2,
-    activeUsers: 342,
-    popularModels: [
-      { name: 'GPT-4 Persian', usage: 45, color: '#8884d8' },
-      { name: 'PersianMind', usage: 30, color: '#82ca9d' },
-      { name: 'Maral-7B', usage: 25, color: '#ffc658' }
-    ],
-    dailyUsage: [
-      { date: '1403/04/20', requests: 1200, users: 45 },
-      { date: '1403/04/21', requests: 1350, users: 52 },
-      { date: '1403/04/22', requests: 1100, users: 48 },
-      { date: '1403/04/23', requests: 1450, users: 58 },
-      { date: '1403/04/24', requests: 1600, users: 62 },
-      { date: '1403/04/25', requests: 1380, users: 55 },
-      { date: '1403/04/26', requests: 1520, users: 60 }
-    ],
-    featureUsage: [
-      { feature: 'چت هوشمند', count: 5200 },
-      { feature: 'تحلیل احساسات', count: 3100 },
-      { feature: 'خلاصه‌سازی', count: 2800 },
-      { feature: 'ترجمه', count: 1900 }
-    ]
+    totalRequests: 0,
+    successRate: 0,
+    avgResponseTime: 0,
+    activeUsers: 0,
+    popularModels: [],
+    dailyUsage: [],
+    featureUsage: []
   })
+
+  useEffect(() => {
+    if (user) {
+      // Fetch user-specific data from Supabase
+      const fetchStats = async () => {
+        // This is a placeholder for your actual data fetching logic
+        // You would typically make a request to your backend or directly to Supabase
+        // to get the user's stats.
+        setStats({
+          totalRequests: user.tokens_used || 0,
+          successRate: 99, // Placeholder
+          avgResponseTime: 0.8, // Placeholder
+          activeUsers: 1, // Current user
+          popularModels: [
+            { name: "GPT-4 Persian", usage: 70, color: "#8884d8" },
+            { name: "Maral-7B", usage: 30, color: "#82ca9d" },
+          ],
+          dailyUsage: [
+            { date: "1403/04/25", requests: user.tokens_used || 0, users: 1 },
+          ],
+          featureUsage: [
+            { feature: "چت هوشمند", count: user.tokens_used || 0 },
+          ],
+        })
+      }
+
+      fetchStats()
+    }
+  }, [user])
 
   const [isLoading, setIsLoading] = useState(false)
 
