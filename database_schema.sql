@@ -31,4 +31,3 @@ CREATE POLICY "Users can update own conversations" ON conversations
 -- Policy: Users can only delete their own conversations
 CREATE POLICY "Users can delete own conversations" ON conversations
   FOR DELETE USING (auth.uid() = user_id);
-

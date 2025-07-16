@@ -25,11 +25,11 @@ export interface Model {
 
 export class APIClient {
   private baseUrl: string
-  private apiKey?: string
+  private llm7ApiKey?: string // Changed from apiKey to llm7ApiKey for clarity
 
-  constructor(baseUrl: string = API_BASE_URL, apiKey?: string) {
+  constructor(baseUrl: string = API_BASE_URL, llm7ApiKey?: string) {
     this.baseUrl = baseUrl
-    this.apiKey = apiKey
+    this.llm7ApiKey = llm7ApiKey
   }
 
   async getModels(): Promise<Model[]> {
@@ -39,6 +39,8 @@ export class APIClient {
       })
 
       if (!response.ok) {
+        const errorText = await response.text()
+        console.error(`HTTP error fetching models! status: ${response.status}, response: ${errorText}`)
         throw new Error(`HTTP error! status: ${response.status}`)
       }
 
@@ -64,12 +66,17 @@ export class APIClient {
   private getHeaders(): Record<string, string> {
     const headers: Record<string, string> = {}
 
-    if (this.apiKey) {
-      headers["Authorization"] = `Bearer ${this.apiKey}`
+    if (this.llm7ApiKey) {
+      // Use llm7ApiKey
+      headers["Authorization"] = `Bearer ${this.llm7ApiKey}`
     }
+    // Add a custom User-Agent header for better API tracking
+    headers["User-Agent"] = "NewLLM-SaaS-Backend/1.0"
 
     return headers
   }
 }
 
+// Export a default client for general use, without an API key initially
+// The API key will be passed when creating instances in server routes
 export const apiClient = new APIClient()

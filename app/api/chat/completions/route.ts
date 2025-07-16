@@ -2,8 +2,9 @@ import { type NextRequest, NextResponse } from "next/server"
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
 import type { Database } from "@/lib/supabase/types"
+import { APIClient } from "@/lib/api-client" // Import APIClient
 
-const API_BASE_URL = "https://api.llm7.io/v1"
+const API_BASE_URL = "https://api.llm7.io/v1" // This is now handled by APIClient
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now()
@@ -87,20 +88,30 @@ export async function POST(request: NextRequest) {
       processedMessages = [systemMessage, ...messages]
     }
 
-    // Make request to LLM7.io API
-    const response = await fetch(`${API_BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent": "Persian-LLM-SaaS/1.0",
-      },
-      body: JSON.stringify({
-        model,
-        messages: processedMessages,
-        temperature,
-        max_tokens,
-        stream,
-      }),
+    // Initialize APIClient with LLM7_API_KEY
+    const llm7ApiKey = process.env.LLM7_API_KEY
+    if (!llm7ApiKey) {
+      console.error("LLM7_API_KEY is not set in environment variables.")
+      await logRequest(
+        supabase,
+        userProfile.id,
+        request,
+        body,
+        500,
+        "LLM7_API_KEY not configured",
+        Date.now() - startTime,
+      )
+      return NextResponse.json({ error: "Server configuration error: LLM API key missing." }, { status: 500 })
+    }
+    const llm7ApiClient = new APIClient(API_BASE_URL, llm7ApiKey)
+
+    // Make request to LLM7.io API using APIClient
+    const response = await llm7ApiClient.createChatCompletion({
+      model,
+      messages: processedMessages,
+      temperature,
+      max_tokens,
+      stream,
     })
 
     const processingTime = Date.now() - startTime

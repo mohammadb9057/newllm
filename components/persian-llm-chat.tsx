@@ -1,20 +1,22 @@
-'use client'
+"use client"
 
-import { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { MessageSquare, Send, Bot, User, Zap } from 'lucide-react'
-import { useAuth } from '@/components/auth-provider'
-import { useToast } from '@/hooks/use-toast'
+import type React from "react"
+
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Badge } from "@/components/ui/badge"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { MessageSquare, Send, Bot, User, Zap } from "lucide-react"
+import { useAuth } from "@/components/auth-provider"
+import { useToast } from "@/hooks/use-toast" // Corrected import path
 
 interface Message {
   id: string
   content: string
-  role: 'user' | 'assistant'
+  role: "user" | "assistant"
   timestamp: Date
   model?: string
   tokens_used?: number
@@ -32,9 +34,9 @@ export function PersianLLMChat() {
   const { user } = useAuth()
   const { toast } = useToast()
   const [messages, setMessages] = useState<Message[]>([])
-  const [input, setInput] = useState('')
+  const [input, setInput] = useState("")
   const [isLoading, setIsLoading] = useState(false)
-  const [selectedModel, setSelectedModel] = useState('gpt-3.5-turbo')
+  const [selectedModel, setSelectedModel] = useState<string | undefined>(undefined) // Initialize as undefined
   const [models, setModels] = useState<Model[]>([])
   const [userTokens, setUserTokens] = useState({ used: 0, limit: 1000, remaining: 1000 })
 
@@ -49,25 +51,42 @@ export function PersianLLMChat() {
     if (!user?.api_token) return
 
     try {
-      const response = await fetch('/api/llm/models', {
+      // Fetch models from our internal API route, which now proxies to LLM7.io
+      const response = await fetch("/api/llm/models", {
         headers: {
-          'Authorization': `Bearer ${user.api_token}`
-        }
+          Authorization: `Bearer ${user.api_token}`,
+        },
       })
 
       if (response.ok) {
         const data = await response.json()
         setModels(data.models)
+        if (data.models.length > 0 && !selectedModel) {
+          // Set default if not already set
+          setSelectedModel(data.models[0].id)
+        }
         if (data.user_info) {
           setUserTokens({
             used: data.user_info.tokens_used,
             limit: data.user_info.tokens_limit,
-            remaining: data.user_info.remaining_tokens
+            remaining: data.user_info.remaining_tokens,
           })
         }
+      } else {
+        console.error("Failed to fetch models:", await response.text())
+        toast({
+          title: "خطا",
+          description: "خطا در بارگذاری مدل‌ها",
+          variant: "destructive",
+        })
       }
     } catch (error) {
-      console.error('Error fetching models:', error)
+      console.error("Error fetching models:", error)
+      toast({
+        title: "خطا",
+        description: "خطا در بارگذاری مدل‌ها",
+        variant: "destructive",
+      })
     }
   }
 
@@ -75,10 +94,10 @@ export function PersianLLMChat() {
     if (!user?.api_token) return
 
     try {
-      const response = await fetch('/api/llm/usage', {
+      const response = await fetch("/api/llm/usage", {
         headers: {
-          'Authorization': `Bearer ${user.api_token}`
-        }
+          Authorization: `Bearer ${user.api_token}`,
+        },
       })
 
       if (response.ok) {
@@ -87,42 +106,55 @@ export function PersianLLMChat() {
           setUserTokens({
             used: data.usage.tokens_used,
             limit: data.usage.tokens_limit,
-            remaining: data.usage.remaining_tokens
+            remaining: data.usage.remaining_tokens,
           })
         }
+      } else {
+        console.error("Failed to fetch usage:", await response.text())
+        toast({
+          title: "خطا",
+          description: "خطا در بارگذاری آمار مصرف",
+          variant: "destructive",
+        })
       }
     } catch (error) {
-      console.error('Error fetching usage:', error)
+      console.error("Error fetching usage:", error)
+      toast({
+        title: "خطا",
+        description: "خطا در بارگذاری آمار مصرف",
+        variant: "destructive",
+      })
     }
   }
 
   const sendMessage = async () => {
-    if (!input.trim() || isLoading || !user?.api_token) return
+    if (!input.trim() || isLoading || !user?.api_token || !selectedModel) return // Ensure model is selected
 
     const userMessage: Message = {
       id: Date.now().toString(),
       content: input,
-      role: 'user',
-      timestamp: new Date()
+      role: "user",
+      timestamp: new Date(),
     }
 
-    setMessages(prev => [...prev, userMessage])
-    setInput('')
+    setMessages((prev) => [...prev, userMessage])
+    setInput("")
     setIsLoading(true)
 
     try {
-      const response = await fetch('/api/llm/chat', {
-        method: 'POST',
+      const response = await fetch("/api/llm/chat", {
+        // This route already proxies to LLM7.io
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.api_token}`
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${user.api_token}`,
         },
         body: JSON.stringify({
           message: input,
           model: selectedModel,
           temperature: 0.7,
-          max_tokens: 1000
-        })
+          max_tokens: 1000,
+        }),
       })
 
       const data = await response.json()
@@ -131,19 +163,19 @@ export function PersianLLMChat() {
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
           content: data.response,
-          role: 'assistant',
+          role: "assistant",
           timestamp: new Date(),
           model: data.model,
-          tokens_used: data.tokens_used
+          tokens_used: data.tokens_used,
         }
 
-        setMessages(prev => [...prev, assistantMessage])
-        
+        setMessages((prev) => [...prev, assistantMessage])
+
         // Update token usage
-        setUserTokens(prev => ({
+        setUserTokens((prev) => ({
           ...prev,
           used: prev.used + data.tokens_used,
-          remaining: data.remaining_tokens
+          remaining: data.remaining_tokens,
         }))
 
         toast({
@@ -154,15 +186,15 @@ export function PersianLLMChat() {
         toast({
           title: "خطا",
           description: data.error || "خطا در ارسال پیام",
-          variant: "destructive"
+          variant: "destructive",
         })
       }
     } catch (error) {
-      console.error('Error sending message:', error)
+      console.error("Error sending message:", error)
       toast({
         title: "خطا",
         description: "خطا در ارتباط با سرور",
-        variant: "destructive"
+        variant: "destructive",
       })
     } finally {
       setIsLoading(false)
@@ -170,7 +202,7 @@ export function PersianLLMChat() {
   }
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       sendMessage()
     }
@@ -197,18 +229,18 @@ export function PersianLLMChat() {
               میزان استفاده توکن
             </span>
             <Badge variant={userTokens.remaining < 100 ? "destructive" : "secondary"}>
-              {userTokens.remaining.toLocaleString('fa-IR')} باقی‌مانده
+              {userTokens.remaining.toLocaleString("fa-IR")} باقی‌مانده
             </Badge>
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
             <div className="flex justify-between text-sm">
-              <span>استفاده شده: {userTokens.used.toLocaleString('fa-IR')}</span>
-              <span>حد مجاز: {userTokens.limit.toLocaleString('fa-IR')}</span>
+              <span>استفاده شده: {userTokens.used.toLocaleString("fa-IR")}</span>
+              <span>حد مجاز: {userTokens.limit.toLocaleString("fa-IR")}</span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2">
-              <div 
+              <div
                 className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                 style={{ width: `${Math.min((userTokens.used / userTokens.limit) * 100, 100)}%` }}
               />
@@ -238,7 +270,7 @@ export function PersianLLMChat() {
               </SelectContent>
             </Select>
             <Badge variant="outline">
-              {models.find(m => m.id === selectedModel)?.name || selectedModel}
+              {models.find((m) => m.id === selectedModel)?.name || selectedModel || "مدل نامشخص"}
             </Badge>
           </div>
         </CardHeader>
@@ -255,26 +287,16 @@ export function PersianLLMChat() {
                 {messages.map((message) => (
                   <div
                     key={message.id}
-                    className={`flex gap-3 ${
-                      message.role === 'user' ? 'justify-end' : 'justify-start'
-                    }`}
+                    className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
                   >
                     <div
                       className={`max-w-[80%] rounded-lg p-3 ${
-                        message.role === 'user'
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-gray-100 text-gray-900'
+                        message.role === "user" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-900"
                       }`}
                     >
                       <div className="flex items-center gap-2 mb-1">
-                        {message.role === 'user' ? (
-                          <User className="h-4 w-4" />
-                        ) : (
-                          <Bot className="h-4 w-4" />
-                        )}
-                        <span className="text-xs opacity-70">
-                          {message.timestamp.toLocaleTimeString('fa-IR')}
-                        </span>
+                        {message.role === "user" ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+                        <span className="text-xs opacity-70">{message.timestamp.toLocaleTimeString("fa-IR")}</span>
                         {message.tokens_used && (
                           <Badge variant="secondary" className="text-xs">
                             {message.tokens_used} توکن
@@ -293,8 +315,14 @@ export function PersianLLMChat() {
                         <span className="text-sm">در حال تایپ...</span>
                         <div className="flex gap-1">
                           <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                          <div
+                            className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                            style={{ animationDelay: "0.1s" }}
+                          ></div>
+                          <div
+                            className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                            style={{ animationDelay: "0.2s" }}
+                          ></div>
                         </div>
                       </div>
                     </div>
@@ -310,12 +338,12 @@ export function PersianLLMChat() {
               onChange={(e) => setInput(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="پیام خود را بنویسید..."
-              disabled={isLoading || userTokens.remaining <= 0}
+              disabled={isLoading || userTokens.remaining <= 0 || !selectedModel} // Disable if no model selected
               className="flex-1"
             />
-            <Button 
-              onClick={sendMessage} 
-              disabled={isLoading || !input.trim() || userTokens.remaining <= 0}
+            <Button
+              onClick={sendMessage}
+              disabled={isLoading || !input.trim() || userTokens.remaining <= 0 || !selectedModel} // Disable if no model selected
               size="icon"
             >
               <Send className="h-4 w-4" />
@@ -332,4 +360,3 @@ export function PersianLLMChat() {
     </div>
   )
 }
-

@@ -19,13 +19,13 @@
 ## نصب محلی
 
 ### 1. کلون کردن پروژه
-```bash
+\`\`\`bash
 git clone <repository-url>
 cd v0-persian-llm-saa-s-main
-```
+\`\`\`
 
 ### 2. نصب وابستگی‌ها
-```bash
+\`\`\`bash
 # با pnpm (توصیه شده)
 pnpm install
 
@@ -34,23 +34,23 @@ npm install
 
 # یا با yarn
 yarn install
-```
+\`\`\`
 
 ### 3. تنظیم متغیرهای محیطی
 فایل `.env.local` را ایجاد کنید:
-```env
+\`\`\`env
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-```
+\`\`\`
 
 ### 4. اجرای پروژه
-```bash
+\`\`\`bash
 # حالت توسعه
 pnpm dev
 
 # یا
 npm run dev
-```
+\`\`\`
 
 پروژه در آدرس `http://localhost:3000` در دسترس خواهد بود.
 
@@ -66,13 +66,13 @@ npm run dev
 5. Deploy کنید
 
 #### تنظیمات Vercel:
-```json
+\`\`\`json
 {
   "buildCommand": "pnpm build",
   "outputDirectory": ".next",
   "installCommand": "pnpm install"
 }
-```
+\`\`\`
 
 ### گزینه 2: Netlify
 
@@ -86,7 +86,7 @@ npm run dev
 ### گزینه 3: Docker
 
 #### Dockerfile:
-```dockerfile
+\`\`\`dockerfile
 FROM node:18-alpine
 
 WORKDIR /app
@@ -100,29 +100,29 @@ RUN npm run build
 EXPOSE 3000
 
 CMD ["npm", "start"]
-```
+\`\`\`
 
 #### اجرا:
-```bash
+\`\`\`bash
 docker build -t persian-llm-saas .
 docker run -p 3000:3000 persian-llm-saas
-```
+\`\`\`
 
 ### گزینه 4: سرور مجازی (VPS)
 
 #### نصب Node.js:
-```bash
+\`\`\`bash
 curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
 sudo apt-get install -y nodejs
-```
+\`\`\`
 
 #### نصب PM2:
-```bash
+\`\`\`bash
 npm install -g pm2
-```
+\`\`\`
 
 #### استقرار:
-```bash
+\`\`\`bash
 # کلون پروژه
 git clone <repository-url>
 cd v0-persian-llm-saa-s-main
@@ -137,7 +137,7 @@ npm run build
 pm2 start npm --name "persian-llm-saas" -- start
 pm2 save
 pm2 startup
-```
+\`\`\`
 
 ## تنظیمات Supabase
 
@@ -147,13 +147,13 @@ pm2 startup
 - URL و anon key را کپی کنید
 
 ### 2. تنظیم احراز هویت
-```sql
+\`\`\`sql
 -- فعال‌سازی احراز هویت با ایمیل
 -- در Supabase Dashboard > Authentication > Settings
-```
+\`\`\`
 
 ### 3. تنظیم RLS (Row Level Security)
-```sql
+\`\`\`sql
 -- مثال برای جدول profiles
 CREATE TABLE profiles (
   id UUID REFERENCES auth.users ON DELETE CASCADE,
@@ -166,30 +166,30 @@ ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Users can view own profile" ON profiles
   FOR SELECT USING (auth.uid() = id);
-```
+\`\`\`
 
 ## مانیتورینگ و نگهداری
 
 ### 1. لاگ‌ها
-```bash
+\`\`\`bash
 # مشاهده لاگ‌های PM2
 pm2 logs persian-llm-saas
 
 # مشاهده لاگ‌های سیستم
 tail -f /var/log/nginx/access.log
-```
+\`\`\`
 
 ### 2. بک‌آپ
-```bash
+\`\`\`bash
 # بک‌آپ پایگاه داده Supabase
 # از dashboard Supabase استفاده کنید
 
 # بک‌آپ فایل‌های پروژه
 tar -czf backup-$(date +%Y%m%d).tar.gz /path/to/project
-```
+\`\`\`
 
 ### 3. بروزرسانی
-```bash
+\`\`\`bash
 # دریافت آخرین تغییرات
 git pull origin main
 
@@ -201,22 +201,22 @@ npm run build
 
 # راه‌اندازی مجدد
 pm2 restart persian-llm-saas
-```
+\`\`\`
 
 ### 4. مانیتورینگ عملکرد
-```bash
+\`\`\`bash
 # نصب htop برای مانیتورینگ سیستم
 sudo apt install htop
 
 # مشاهده وضعیت PM2
 pm2 status
 pm2 monit
-```
+\`\`\`
 
 ## امنیت
 
 ### 1. HTTPS
-```nginx
+\`\`\`nginx
 # تنظیم Nginx برای HTTPS
 server {
     listen 443 ssl;
@@ -231,19 +231,19 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
     }
 }
-```
+\`\`\`
 
 ### 2. فایروال
-```bash
+\`\`\`bash
 # تنظیم UFW
 sudo ufw enable
 sudo ufw allow ssh
 sudo ufw allow 80
 sudo ufw allow 443
-```
+\`\`\`
 
 ### 3. محدودیت نرخ درخواست
-```javascript
+\`\`\`javascript
 // در next.config.js
 module.exports = {
   async headers() {
@@ -260,12 +260,12 @@ module.exports = {
     ]
   }
 }
-```
+\`\`\`
 
 ## بهینه‌سازی عملکرد
 
 ### 1. کش کردن
-```javascript
+\`\`\`javascript
 // تنظیم cache headers
 export async function GET() {
   return new Response(data, {
@@ -274,7 +274,7 @@ export async function GET() {
     }
   })
 }
-```
+\`\`\`
 
 ### 2. CDN
 - استفاده از Cloudflare یا AWS CloudFront
@@ -282,7 +282,7 @@ export async function GET() {
 - فشرده‌سازی gzip
 
 ### 3. بهینه‌سازی تصاویر
-```javascript
+\`\`\`javascript
 // در next.config.js
 module.exports = {
   images: {
@@ -290,18 +290,18 @@ module.exports = {
     formats: ['image/webp', 'image/avif']
   }
 }
-```
+\`\`\`
 
 ## عیب‌یابی
 
 ### مشکلات رایج:
 
 #### 1. خطای Build
-```bash
+\`\`\`bash
 # پاک کردن cache
 rm -rf .next
 npm run build
-```
+\`\`\`
 
 #### 2. مشکل اتصال به Supabase
 - بررسی URL و کلیدها
@@ -314,10 +314,10 @@ npm run build
 - بهینه‌سازی کوئری‌های پایگاه داده
 
 #### 4. خطاهای JavaScript
-```bash
+\`\`\`bash
 # فعال‌سازی source maps
 NEXT_PUBLIC_DEBUG=true npm run dev
-```
+\`\`\`
 
 ## پشتیبانی و به‌روزرسانی
 
@@ -341,4 +341,3 @@ NEXT_PUBLIC_DEBUG=true npm run dev
 **نسخه**: 2.0.0  
 **آخرین بروزرسانی**: 1403/04/25  
 **سطح پشتیبانی**: Production Ready
-

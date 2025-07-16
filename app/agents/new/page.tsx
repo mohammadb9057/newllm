@@ -15,14 +15,17 @@ import { Badge } from "@/components/ui/badge"
 import { Bot, Save, ArrowLeft, Brain, Settings } from "lucide-react"
 import { useAuth } from "@/components/auth-provider"
 import { getSupabaseClient } from "@/lib/supabase/client"
-import { useToast } from "@/hooks/use-toast"
+import { useToast } from "@/hooks/use-toast" // Corrected import path
 import { DashboardHeader } from "@/components/dashboard-header"
 import Link from "next/link"
 
 interface Model {
   id: string
-  object: string
-  owned_by: string
+  name: string // Added name for display
+  description: string
+  max_tokens: number
+  cost_per_token: number
+  owned_by?: string // Added owned_by for display
 }
 
 export default function NewAgentPage() {
@@ -37,23 +40,40 @@ export default function NewAgentPage() {
     name: "",
     description: "",
     system_prompt: "",
-    model_id: "gpt-3.5-turbo",
+    model_id: "", // Initialize as empty string
     memory_type: "conversation",
     has_memory: true,
   })
 
   useEffect(() => {
-    loadModels()
-  }, [])
+    if (user) {
+      // Only load models if user is authenticated
+      loadModels()
+    }
+  }, [user]) // Depend on user to ensure auth is ready
 
   const loadModels = async () => {
     try {
-      const response = await fetch("/api/models")
+      // Fetch models from our internal API route, which now proxies to LLM7.io
+      const response = await fetch("/api/llm/models", {
+        headers: {
+          Authorization: `Bearer ${user?.api_token}`, // Pass user's API token for authentication with our backend
+        },
+      })
       const data = await response.json()
-      setModels(data.data || [])
 
-      if (data.data?.length > 0) {
-        setFormData((prev) => ({ ...prev, model_id: data.data[0].id }))
+      if (response.ok && data.models) {
+        setModels(data.models || [])
+        if (data.models?.length > 0) {
+          setFormData((prev) => ({ ...prev, model_id: data.models[0].id }))
+        }
+      } else {
+        console.error("Error loading models:", data.error || "Unknown error")
+        toast({
+          title: "خطا",
+          description: data.error || "خطا در بارگذاری مدل‌ها",
+          variant: "destructive",
+        })
       }
     } catch (error) {
       console.error("Error loading models:", error)
@@ -161,16 +181,18 @@ export default function NewAgentPage() {
                   <Label htmlFor="model">مدل هوش مصنوعی</Label>
                   <Select value={formData.model_id} onValueChange={(value) => handleInputChange("model_id", value)}>
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="انتخاب مدل" />
                     </SelectTrigger>
                     <SelectContent>
                       {models.map((model) => (
                         <SelectItem key={model.id} value={model.id}>
                           <div className="flex items-center gap-2">
-                            <span>{model.id}</span>
-                            <Badge variant="outline" className="text-xs">
-                              {model.owned_by}
-                            </Badge>
+                            <span>{model.name || model.id}</span> {/* Use model.name if available */}
+                            {model.owned_by && (
+                              <Badge variant="outline" className="text-xs">
+                                {model.owned_by}
+                              </Badge>
+                            )}
                           </div>
                         </SelectItem>
                       ))}
@@ -301,7 +323,9 @@ export default function NewAgentPage() {
                 انصراف
               </Button>
             </Link>
-            <Button type="submit" disabled={loading || !formData.name}>
+            <Button type="submit" disabled={loading || !formData.name || !formData.model_id}>
+              {" "}
+              {/* Disable if model_id is not selected */}
               {loading ? (
                 "در حال ساخت..."
               ) : (

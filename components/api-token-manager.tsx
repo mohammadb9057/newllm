@@ -233,4 +233,3 @@ console.log(data);`}</pre>
     </div>
   )
 }
-
